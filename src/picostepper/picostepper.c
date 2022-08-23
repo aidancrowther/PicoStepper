@@ -11,7 +11,6 @@
 struct PicoStepperContainer psc;
 bool psc_is_initialised = false;
 
-
 static void picostepper_async_handler() {
   // Safe interrupt value and clear the interrupt
   uint32_t interrupt_request = dma_hw->ints0;
@@ -46,6 +45,8 @@ static PicoStepperRawDevice picostepper_create_raw_device() {
   psrq.is_running = false;
   psrq.direction = true;
   psrq.steps = 0;
+  psrq.position = 0;
+  psrq.acceleration = 0;
   psrq.enabled = false;
   psrq.command = 0;
   psrq.pio_id = -1;
@@ -130,10 +131,14 @@ static PicoStepper picostepper_init_unclaimed_device() {
 PicoStepper picostepper_init(uint base_pin, PicoStepperMotorType driver) {
   // Choose the programm to generate the steps
   const pio_program_t * picostepper_driver_program;
-  picostepper_driver_program = &picostepper_four_wire_program;
+  //picostepper_driver_program = &picostepper_four_wire_program;
   switch(driver){
     case FourWireDriver: 
       picostepper_driver_program = &picostepper_four_wire_program;
+      break;
+
+    case TwoWireDriver:
+      picostepper_driver_program = &picostepper_two_wire_program;
       break;
 
     // Other drivers are not yet implemented
@@ -147,13 +152,44 @@ PicoStepper picostepper_init(uint base_pin, PicoStepperMotorType driver) {
 
   switch(driver){
     case FourWireDriver:   
-      picostepper_four_wire_program_init(psc.devices[device].pio, psc.devices[device].statemachine, picostepper_program_offset, base_pin);
+      picostepper_four_wire_program_init(psc.devices[device].pio, psc.devices[device].statemachine, picostepper_program_offset, base_pin, CLKDIV);
+      break;
+
+      case TwoWireDriver:   
+      picostepper_two_wire_program_init(psc.devices[device].pio, psc.devices[device].statemachine, picostepper_program_offset, base_pin, CLKDIV);
       break;
       
     // Other drivers are not yet implemented
     default:  return -1;
   }
   
+  
+  return device;
+}
+
+PicoStepper picostepper_pindef_init(uint dir_pin, uint step_pin, PicoStepperMotorType driver) {
+  // Choose the programm to generate the steps
+  const pio_program_t * picostepper_driver_program;
+  // Create picostepper object and claim pio resources
+  PicoStepper device = picostepper_init_unclaimed_device();
+
+  if(dir_pin > step_pin){
+
+  picostepper_driver_program = &picostepper_two_wire_program;
+  // Load the driver program into the pio instruction memory
+  uint picostepper_program_offset = pio_add_program(psc.devices[device].pio, picostepper_driver_program);
+  // Init PIO program
+  picostepper_two_wire_program_init(psc.devices[device].pio, psc.devices[device].statemachine, picostepper_program_offset, step_pin, CLKDIV);
+
+  } else {
+
+    picostepper_driver_program = &picostepper_two_wire_reversed_program;
+    // Load the driver program into the pio instruction memory
+    uint picostepper_program_offset = pio_add_program(psc.devices[device].pio, picostepper_driver_program);
+    // Init PIO program
+    picostepper_two_wire_reversed_program_init(psc.devices[device].pio, psc.devices[device].statemachine, picostepper_program_offset, dir_pin, CLKDIV);
+
+  }
   
   return device;
 }
@@ -209,14 +245,26 @@ void picostepper_set_async_enabled(PicoStepper device, bool enabled) {
 // Set the delay between steps used by picostepper_move_async.
 // Can be set during a running async movement.
 void picostepper_set_async_delay(PicoStepper device, uint delay) {
-  psc.devices[device].delay = delay;
+  psc.devices[device].delay = max(delay, MINDELAY);
   psc.devices[device].command = (((psc.devices[device].delay << 1) | psc.devices[device].direction) << 1 )| psc.devices[device].enabled;
 }
 
-int picostepper_convert_speed_to_delay(float steps_per_second) {
-  return 0;
+// Set the acceleration for the stepper
+void picostepper_set_acceleration(PicoStepper device, uint acceleration){
+  psc.devices[device].acceleration = acceleration;
 }
 
+// Invert the delay to speed math, calculate a delay given a speed and the known maximum steprate
+int picostepper_convert_speed_to_delay(float steps_per_second) {
+  int delay = max((int) (double) (10*MAXSTEPRATE)/(double) steps_per_second-10, 0);
+  return delay;
+}
+
+// Thanks to Jersey for helping with this math
+int picostepper_convert_delay_to_speed(int delay){
+  int step_rate = (int) (double) MAXSTEPRATE/(((double) delay/10)+1);
+  return step_rate;
+}
 
 
 // Move the stepper ans imidiatly return from function without waiting for the movement to finish
@@ -254,5 +302,80 @@ bool picostepper_move_async(PicoStepper device, int steps, PicoStepperCallback f
   return true;
 }
 
+// Handle stepper acceleration as an async callback
+void picostepper_accelerate(volatile PicoStepper device){
+  // Base case, if direction is 0 we are coasting, do nothing
+  if(psc.devices[device].acceleration_direction == 0) return;
 
+  // If direction is negative, we are decelerating
+  if(psc.devices[device].acceleration_direction < 0){
 
+    // Pop the new delay value off the speed stack
+    uint delay = pop();
+
+    picostepper_set_async_delay(device, delay);
+    return;
+  }
+
+  // If direction is positive, we are accelerating
+  if(psc.devices[device].acceleration_direction > 0){
+    // Record the current delay value and push it to the speed stack
+    uint delay = psc.devices[device].delay;
+    push(delay);
+
+    // Calculate the current speed based on the delay
+    uint speed = picostepper_convert_delay_to_speed(delay);
+
+    // Determine how many steps per second to increase speed based on acceleration and current speed
+    double time_s = (double) NUMSTEPS/ (double) speed;
+    speed += (uint) ((double) psc.devices[device].acceleration)*time_s;
+
+    // If the delay is too small to make a change, decrease delay by 1. If we are already at the minimum delay (maximum speed), keep it there
+    uint calculated_delay = picostepper_convert_speed_to_delay(speed);
+    calculated_delay = calculated_delay == delay ? delay - 1 : calculated_delay;
+    delay = max(calculated_delay, 5);
+
+    picostepper_set_async_delay(device, delay);
+    return;
+  }
+}
+
+// Take a number of steps as a position value and move to it applying acceleration as needed
+bool picostepper_move_to_position(volatile PicoStepper device, int position){
+
+  // Determine the number of steps to be taken, and in which direction
+  int current_position = psc.devices[device].position;
+  uint steps = abs(position - current_position);
+  bool direction = position > current_position;
+
+  // Update the tracked position value
+  psc.devices[device].position = position;
+
+  picostepper_set_async_direction(device, direction);
+
+  // Split the movement into even slices for accelerating and decelerating
+  uint acceleration_steps = (int) ceil((double) steps/NUMSTEPS);
+
+  // Accelerate to maximum speed taking NUMSTEPS per slice (this can be tuned as needed, but is accounted for later)
+  psc.devices[device].acceleration_direction = 1;
+  for(int i=0; i<acceleration_steps/2; i++){
+    picostepper_move_async(device, NUMSTEPS, &picostepper_accelerate);
+    while(psc.devices[device].is_running);
+  }
+
+  // Consume any extra steps that prevent an even split, coast at current speed rather than changing it
+  psc.devices[device].acceleration_direction = 0;
+  if(acceleration_steps%2 > 0){
+    picostepper_move_async(device, steps%NUMSTEPS, NULL);
+    while(psc.devices[device].is_running);
+  }
+
+  // Decelerate in the same fashion as accelerating
+  psc.devices[device].acceleration_direction = -1;
+  for(int i=0; i<acceleration_steps/2; i++){
+    picostepper_move_async(device, NUMSTEPS, &picostepper_accelerate);
+    while(psc.devices[device].is_running);
+  }
+
+  return true;
+}

@@ -7,6 +7,7 @@ add_executable(picostepper)
 
 target_include_directories(picostepper PRIVATE 
         src
+        src/libraries
         src/picostepper
         src/picostepper/driver
 )
@@ -14,6 +15,7 @@ target_include_directories(picostepper PRIVATE
 target_sources(picostepper PRIVATE 
         src/main.c 
         src/picostepper/picostepper.c
+        src/libraries/stack.c
 )
 
 target_link_libraries(picostepper PRIVATE 
@@ -32,4 +34,4 @@ pico_enable_stdio_uart(picostepper 1)
 # Compile the PIO-programs and include it into the project
 pico_add_extra_outputs(picostepper)
 pico_generate_pio_header(picostepper ${CMAKE_CURRENT_LIST_DIR}/src/picostepper/driver/four_wire.pio)
-
+pico_generate_pio_header(picostepper ${CMAKE_CURRENT_LIST_DIR}/src/picostepper/driver/two_wire.pio)
