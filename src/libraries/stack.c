@@ -2,23 +2,23 @@
 
 struct node *top = NULL;
 
-void push(uint value){
+void push(struct node **top, uint value){
 
     struct node *temp = (struct node*) malloc(sizeof(struct node));
     temp->value = value;
-    temp->link = top;
-    top = temp;
+    temp->link = (*top);
+    (*top) = temp;
 
 }
 
-uint pop(){
+uint pop(struct node **top){
     struct node *temp;
-    if(top == NULL) return -1;
+    if((*top) == NULL) return -1;
 
-    temp = top;
+    temp = (*top);
 
-    uint value = top->value;
-    top = top->link;
+    uint value = (*top)->value;
+    (*top) = (*top)->link;
     
     free(temp);
 

@@ -9,9 +9,9 @@ struct node{
     uint value;
 };
 
-extern struct node *top;
+//extern struct node *top;
 
-void push(uint value);
-uint pop();
+void push(struct node **top, uint value);
+uint pop(struct node **top);
 
 #endif

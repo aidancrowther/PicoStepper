@@ -31,7 +31,7 @@ int main() {
   picostepper_set_async_enabled(device_two, enabled);
 
   //picostepper_move_async(device, steps, &movement_finished);
-  //picostepper_move_async(device_two, steps, &movement_finished);
+  picostepper_move_async(device_two, steps, &movement_finished);
 
   picostepper_set_async_delay(device, 100);
   picostepper_set_async_delay(device_two, 100);

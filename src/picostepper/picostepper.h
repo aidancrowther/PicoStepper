@@ -50,6 +50,7 @@ struct picostepper_raw_device_def {
   int position;
   int acceleration_direction;
   uint acceleration;
+  struct node *stack;
   uint delay;
 	PIO pio;
   int pio_id;

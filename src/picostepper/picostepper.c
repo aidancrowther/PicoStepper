@@ -311,7 +311,7 @@ void picostepper_accelerate(volatile PicoStepper device){
   if(psc.devices[device].acceleration_direction < 0){
 
     // Pop the new delay value off the speed stack
-    uint delay = pop();
+    uint delay = pop(&psc.devices[device].stack);
 
     picostepper_set_async_delay(device, delay);
     return;
@@ -319,9 +319,10 @@ void picostepper_accelerate(volatile PicoStepper device){
 
   // If direction is positive, we are accelerating
   if(psc.devices[device].acceleration_direction > 0){
+
     // Record the current delay value and push it to the speed stack
     uint delay = psc.devices[device].delay;
-    push(delay);
+    push(&psc.devices[device].stack, delay);
 
     // Calculate the current speed based on the delay
     uint speed = picostepper_convert_delay_to_speed(delay);
