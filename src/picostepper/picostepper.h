@@ -102,5 +102,6 @@ bool picostepper_move_to_position(PicoStepper device, int position);
 bool picostepper_move_to_positions(volatile PicoStepper devices[], int positions[], uint num_steppers);
 void picostepper_accelerate(PicoStepper device);
 void picostepper_set_acceleration(PicoStepper device, uint acceleration);
+void picostepper_set_position(PicoStepper device, uint position);
 
 #endif

@@ -255,6 +255,11 @@ void picostepper_set_acceleration(PicoStepper device, uint acceleration){
   psc.devices[device].acceleration = acceleration;
 }
 
+// Set the steppers internal position value
+void picostepper_set_position(PicoStepper device, uint position){
+  psc.devices[device].position = position;
+}
+
 // Invert the delay to speed math, calculate a delay given a speed and the known maximum steprate
 int picostepper_convert_speed_to_delay(float steps_per_second) {
   int delay = max((int) (double) (10*MAXSTEPRATE)/(double) steps_per_second-10, 0);
