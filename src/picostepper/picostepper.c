@@ -47,6 +47,7 @@ static PicoStepperRawDevice picostepper_create_raw_device() {
   psrq.steps = 0;
   psrq.position = 0;
   psrq.acceleration = 0;
+  psrq.moving_acceleration = 0;
   psrq.enabled = false;
   psrq.command = 0;
   psrq.pio_id = -1;
@@ -329,7 +330,7 @@ void picostepper_accelerate(volatile PicoStepper device){
 
     // Determine how many steps per second to increase speed based on acceleration and current speed
     double time_s = (double) NUMSTEPS/ (double) speed;
-    speed += (uint) ((double) psc.devices[device].acceleration)*time_s;
+    speed += (uint) ((double) psc.devices[device].moving_acceleration)*time_s;
 
     // If the delay is too small to make a change, decrease delay by 1. If we are already at the minimum delay (maximum speed), keep it there
     uint calculated_delay = picostepper_convert_speed_to_delay(speed);
@@ -345,37 +346,126 @@ void picostepper_accelerate(volatile PicoStepper device){
 bool picostepper_move_to_position(volatile PicoStepper device, int position){
 
   // Determine the number of steps to be taken, and in which direction
-  int current_position = psc.devices[device].position;
+  uint current_position = psc.devices[device].position;
   uint steps = abs(position - current_position);
   bool direction = position > current_position;
 
   // Update the tracked position value
   psc.devices[device].position = position;
+  psc.devices[device].moving_acceleration = psc.devices[device].acceleration;
 
   picostepper_set_async_direction(device, direction);
 
   // Split the movement into even slices for accelerating and decelerating
-  uint acceleration_steps = (int) ceil((double) steps/NUMSTEPS);
+  uint acceleration_steps = steps/NUMSTEPS;
 
   // Accelerate to maximum speed taking NUMSTEPS per slice (this can be tuned as needed, but is accounted for later)
   psc.devices[device].acceleration_direction = 1;
-  for(int i=0; i<acceleration_steps/2; i++){
+  for(uint i=0; i<acceleration_steps/2; i++){
     picostepper_move_async(device, NUMSTEPS, &picostepper_accelerate);
-    while(psc.devices[device].is_running);
+    while(psc.devices[device].is_running) sleep_us(10);
   }
 
   // Consume any extra steps that prevent an even split, coast at current speed rather than changing it
   psc.devices[device].acceleration_direction = 0;
-  if(acceleration_steps%2 > 0){
+  if(steps%NUMSTEPS > 0){
     picostepper_move_async(device, steps%NUMSTEPS, NULL);
-    while(psc.devices[device].is_running);
+    while(psc.devices[device].is_running) sleep_us(10);
   }
 
   // Decelerate in the same fashion as accelerating
   psc.devices[device].acceleration_direction = -1;
-  for(int i=0; i<acceleration_steps/2; i++){
+  for(uint i=0; i<acceleration_steps/2; i++){
     picostepper_move_async(device, NUMSTEPS, &picostepper_accelerate);
-    while(psc.devices[device].is_running);
+    while(psc.devices[device].is_running) sleep_us(10);
+  }
+
+  return true;
+}
+
+// Take a number of steps as a position value and move to it applying acceleration as needed for multiple steppers
+// All the loops feel a bit redundant, might want to try and look into consolidating them better
+bool picostepper_move_to_positions(volatile PicoStepper devices[], int positions[], uint num_steppers){
+
+  // Setup trackers for the various steppers
+  bool stepper_directions[num_steppers];
+  uint stepper_steps[num_steppers];
+  uint steps = 0;
+  uint acceleration = psc.devices[devices[0]].acceleration;
+
+  // Determine what each stepper should do
+  for(uint stepper; stepper < num_steppers; stepper++){
+
+    // Determine the number of steps to be taken, and in which direction
+    uint current_position = psc.devices[devices[stepper]].position;
+    uint steps_to_take = abs(positions[stepper] - current_position);
+    uint direction = positions[stepper] > current_position;
+    stepper_directions[stepper] = direction;
+    stepper_steps[stepper] = steps_to_take;
+
+    // Update the tracked position value and direction
+    psc.devices[devices[stepper]].position = positions[stepper];
+    picostepper_set_async_direction(devices[stepper], direction);
+
+    // Determine which motor has the least distance to travel to set the number of slices
+    steps = steps == 0 ? steps_to_take : min(steps, steps_to_take);
+    acceleration = min(acceleration, psc.devices[devices[stepper]].acceleration);
+
+  }
+
+  // Split the movement into even slices for accelerating and decelerating
+  uint acceleration_steps = steps/NUMSTEPS;
+
+  // Determine the number of steps to take per slice
+  // Ex: Stepper_1 moves 1200 steps
+  // Stepper_2 moves 600 steps
+  // To arrive at the same time, per slice, stepper_1 moves 200 steps while stepper_2 moves 100
+  for(int stepper = 0; stepper < num_steppers; stepper++){
+    stepper_steps[stepper] = stepper_steps[stepper]/acceleration_steps;
+  }
+
+  // Set each steppers acceleration direction and acceleration rate
+  // By using the slowest of the two accelerations, we ensure that neither stepper has to wait on the other per each slice
+  for(int stepper = 0; stepper < num_steppers; stepper++){
+    psc.devices[devices[stepper]].acceleration_direction = 1;
+    psc.devices[devices[stepper]].moving_acceleration = acceleration;
+  }
+
+  // Accelerate for the first half of the slices
+  for(int i=0; i<acceleration_steps/2; i++){
+    for(int stepper = 0; stepper < num_steppers; stepper++){
+      picostepper_move_async(devices[stepper], stepper_steps[stepper], &picostepper_accelerate);
+    }
+    // Wait for all motors to finish moving before proceeding
+    for(int stepper = 0; stepper < num_steppers; stepper++){
+      while(psc.devices[devices[stepper]].is_running) sleep_us(10);
+    }
+  }
+
+  // Set acceleration direction to decelerate
+  for(int stepper = 0; stepper < num_steppers; stepper++){
+    psc.devices[devices[stepper]].acceleration_direction = -1;
+  }
+
+  // Begin decelerating
+  for(int i=0; i<acceleration_steps/2; i++){
+    for(int stepper = 0; stepper < num_steppers; stepper++){
+      picostepper_move_async(devices[stepper], stepper_steps[stepper], &picostepper_accelerate);
+    }
+    for(int stepper = 0; stepper < num_steppers; stepper++){
+      while(psc.devices[devices[stepper]].is_running) sleep_us(10);
+    }
+  }
+
+  // We consume any remaining steps here 
+  // This may cause motors to arrive NUMSTEPS out of sync, with a small enough value this isn't a problem yet
+  for(int stepper = 0; stepper < num_steppers; stepper++){
+    psc.devices[devices[stepper]].acceleration_direction = 0;
+    if(positions[stepper]%NUMSTEPS > 0) picostepper_move_async(devices[stepper], positions[stepper]%NUMSTEPS, NULL);
+  }
+
+  for(int stepper = 0; stepper < num_steppers; stepper++){
+    while(psc.devices[devices[stepper]].is_running) sleep_us(10);
   }
 
   return true;

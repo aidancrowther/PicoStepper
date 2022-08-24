@@ -22,38 +22,57 @@ int main() {
   bool enabled = true;
   uint steps = 10;
 
-  picostepper_set_async_delay(device, 100);
-  picostepper_set_async_direction(device, direction);
-  picostepper_set_async_enabled(device, enabled);
+  PicoStepper devices[2];
+  int positions[2];
 
-  picostepper_set_async_delay(device_two, delay);
-  picostepper_set_async_direction(device_two, direction);
+  devices[0] = device;
+  devices[1] = device_two;
+
+  picostepper_set_async_enabled(device, enabled);
   picostepper_set_async_enabled(device_two, enabled);
 
   //picostepper_move_async(device, steps, &movement_finished);
-  picostepper_move_async(device_two, steps, &movement_finished);
+  //picostepper_move_async(device_two, steps, &movement_finished);
 
   picostepper_set_async_delay(device, 100);
   picostepper_set_async_delay(device_two, 100);
 
   while(true){
     picostepper_set_acceleration(device, 0);
-    picostepper_move_to_position(device, 4000);
+    picostepper_set_acceleration(device_two, 0);
+    positions[0] = 4000;
+    positions[1] = 0;
+    picostepper_move_to_positions(devices, positions, 2);
     sleep_ms(1000);
-    picostepper_move_to_position(device, 2050);
+    positions[0] = 2050;
+    positions[1] = 6000;
+    picostepper_move_to_positions(devices, positions, 2);
     sleep_ms(1000);
-    picostepper_move_to_position(device, 6000);
+    positions[0] = 6000;
+    positions[1] = 20500;
+    picostepper_move_to_positions(devices, positions, 2);
     sleep_ms(1000);
-    picostepper_move_to_position(device, 0);
+    positions[0] = 0;
+    positions[1] = 4000;
+    picostepper_move_to_positions(devices, positions, 2);
     sleep_ms(1000);
     picostepper_set_acceleration(device, 400000);
-    picostepper_move_to_position(device, 4000);
+    picostepper_set_acceleration(device_two, 200000);
+    positions[0] = 4000;
+    positions[1] = 0;
+    picostepper_move_to_positions(devices, positions, 2);
     sleep_ms(1000);
-    picostepper_move_to_position(device, 2050);
+    positions[0] = 2050;
+    positions[1] = 6000;
+    picostepper_move_to_positions(devices, positions, 2);
     sleep_ms(1000);
-    picostepper_move_to_position(device, 6000);
+    positions[0] = 6000;
+    positions[1] = 2050;
+    picostepper_move_to_positions(devices, positions, 2);
     sleep_ms(1000);
-    picostepper_move_to_position(device, 0);
+    positions[0] = 0;
+    positions[1] = 4000;
+    picostepper_move_to_positions(devices, positions, 2);
     sleep_ms(1000);
   }
 

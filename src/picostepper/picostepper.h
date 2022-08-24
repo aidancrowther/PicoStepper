@@ -13,13 +13,13 @@
 #define MINDELAY 0
 #define NUMSTEPS 100 // The number of steps taken between accelerations
 #define max(a,b) \
-   ({ __typeof__ (a) _a = (a); \
-       __typeof__ (b) _b = (b); \
-     _a > _b ? _a : _b; })
+  ({ __typeof__ (a) _a = (a); \
+      __typeof__ (b) _b = (b); \
+    _a > _b ? _a : _b; })
 #define min(a,b) \
-   ({ __typeof__ (a) _a = (a); \
-       __typeof__ (b) _b = (b); \
-     _a < _b ? _a : _b; })
+  ({ __typeof__ (a) _a = (a); \
+      __typeof__ (b) _b = (b); \
+    _a < _b ? _a : _b; })
 
 #include <stdio.h>
 #include <stdbool.h>
@@ -50,6 +50,7 @@ struct picostepper_raw_device_def {
   int position;
   int acceleration_direction;
   uint acceleration;
+  uint moving_acceleration;
   struct node *stack;
   uint delay;
 	PIO pio;
@@ -98,6 +99,7 @@ int picostepper_convert_speed_to_delay(float steps_per_second);
 int picostepper_convert_delay_to_speed(int delay);
 bool picostepper_move_async(PicoStepper device, int steps, PicoStepperCallback func);
 bool picostepper_move_to_position(PicoStepper device, int position);
+bool picostepper_move_to_positions(volatile PicoStepper devices[], int positions[], uint num_steppers);
 void picostepper_accelerate(PicoStepper device);
 void picostepper_set_acceleration(PicoStepper device, uint acceleration);
 
