@@ -26,7 +26,7 @@ target_link_libraries(picostepper PRIVATE
  
 # Initalise the SDK
 pico_sdk_init()
- 
+
 # Enable USB, UART output
 pico_enable_stdio_usb(picostepper 1)
 pico_enable_stdio_uart(picostepper 1)

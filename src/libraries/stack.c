@@ -1,7 +1,5 @@
 #include "stack.h"
 
-struct node *top = NULL;
-
 void push(struct node **top, uint value){
 
     struct node *temp = (struct node*) malloc(sizeof(struct node));
@@ -23,4 +21,8 @@ uint pop(struct node **top){
     free(temp);
 
     return value;
+}
+
+bool isEmpty(struct node **top){
+    return (*top) == NULL;
 }

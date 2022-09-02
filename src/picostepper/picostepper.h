@@ -11,7 +11,7 @@
 #define CLKDIV 125 // Clock divider of 125 gives a maximum steprate of 100,000steps/sec
 #define MAXSTEPRATE 12500000/CLKDIV // Convert the clockrate into a maximum steps/second value
 #define MINDELAY 0
-#define NUMSTEPS 100 // The number of steps taken between accelerations
+#define NUMSTEPS 50 // The number of steps taken between accelerations
 #define max(a,b) \
   ({ __typeof__ (a) _a = (a); \
       __typeof__ (b) _b = (b); \
@@ -51,6 +51,9 @@ struct picostepper_raw_device_def {
   int acceleration_direction;
   uint acceleration;
   uint moving_acceleration;
+  uint max_speed;
+  uint min_speed;
+  int coasting_slices;
   struct node *stack;
   uint delay;
 	PIO pio;
@@ -94,14 +97,18 @@ PicoStepper picostepper_pindef_init(uint dir_pin, uint step_pin, PicoStepperMoto
 bool picostepper_move_blocking(PicoStepper device, uint steps, bool direction, uint delay, int delay_change);
 void picostepper_set_async_direction(PicoStepper device, bool direction);
 void picostepper_set_async_enabled(PicoStepper device, bool enabled);
+bool picostepper_get_async_enabled(PicoStepper device);
 void picostepper_set_async_delay(PicoStepper device, uint delay);
+void picostepper_set_async_speed(PicoStepper device, uint speed);
 int picostepper_convert_speed_to_delay(float steps_per_second);
 int picostepper_convert_delay_to_speed(int delay);
 bool picostepper_move_async(PicoStepper device, int steps, PicoStepperCallback func);
 bool picostepper_move_to_position(PicoStepper device, int position);
-bool picostepper_move_to_positions(volatile PicoStepper devices[], int positions[], uint num_steppers);
 void picostepper_accelerate(PicoStepper device);
 void picostepper_set_acceleration(PicoStepper device, uint acceleration);
 void picostepper_set_position(PicoStepper device, uint position);
+bool picostepper_move_to_positions(volatile PicoStepper devices[], int positions[], uint num_steppers);
+void picostepper_set_max_speed(PicoStepper device, uint speed);
+void picostepper_set_min_speed(PicoStepper device, uint speed);
 
 #endif

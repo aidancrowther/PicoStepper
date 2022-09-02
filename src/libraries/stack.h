@@ -13,5 +13,6 @@ struct node{
 
 void push(struct node **top, uint value);
 uint pop(struct node **top);
+bool isEmpty(struct node **top);
 
 #endif
