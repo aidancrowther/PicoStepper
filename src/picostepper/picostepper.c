@@ -217,7 +217,7 @@ bool picostepper_move_blocking(PicoStepper device, uint steps, bool direction, u
   uint calculated_delay = delay;
   for (size_t i = 0; i < steps; i++)
   {
-    command = (((calculated_delay << 1) | direction) << 1 ) | 1;
+    command = (((calculated_delay << 1) | direction ^ DRIVER) << 1 ) | 1;
     pio_sm_put_blocking(psc.devices[device].pio, psc.devices[device].statemachine, command);
     calculated_delay += delay_change;
   }
@@ -231,7 +231,7 @@ bool picostepper_move_blocking(PicoStepper device, uint steps, bool direction, u
 // Set the direction used by picostepper_move_async.
 // Can be set during a running async movement.
 void picostepper_set_async_direction(PicoStepper device, bool direction) {
-  psc.devices[device].direction = direction;
+  psc.devices[device].direction = direction ^ DRIVER;
   psc.devices[device].command = (((psc.devices[device].delay << 1) | psc.devices[device].direction) << 1 )| psc.devices[device].enabled;
 }
 
