@@ -217,7 +217,7 @@ bool picostepper_move_blocking(PicoStepper device, uint steps, bool direction, u
   uint calculated_delay = delay;
   for (size_t i = 0; i < steps; i++)
   {
-    command = (((calculated_delay << 1) | direction ^ DRIVER) << 1 ) | 1;
+    command = (((calculated_delay << 1) | (direction ^ DRIVER)) << 1 ) | 1;
     pio_sm_put_blocking(psc.devices[device].pio, psc.devices[device].statemachine, command);
     calculated_delay += delay_change;
   }
@@ -435,6 +435,12 @@ bool picostepper_move_to_positions(volatile PicoStepper devices[], int positions
   uint steps = 0;
   uint acceleration = psc.devices[devices[0]].acceleration;
   uint most_steps = 0;
+  bool no_move_needed = true;
+
+  for(uint stepper; stepper < num_steppers; stepper++) no_move_needed &= positions[stepper] == psc.devices[devices[stepper]].position;
+  if(no_move_needed) return true;
+
+  //printf("Need to move\n");
 
   // Determine what each stepper should do
   for(uint stepper; stepper < num_steppers; stepper++){
@@ -458,6 +464,8 @@ bool picostepper_move_to_positions(volatile PicoStepper devices[], int positions
 
   }
 
+  //printf("Stepper movemenets determiend\n");
+
   // Split the movement into even slices for accelerating and decelerating
   //uint acceleration_steps = steps/NUMSTEPS;
   uint acceleration_steps = most_steps/NUMSTEPS;
@@ -471,6 +479,8 @@ bool picostepper_move_to_positions(volatile PicoStepper devices[], int positions
     psc.devices[devices[stepper]].moving_acceleration = (double) (acceleration*stepper_steps[stepper]) / (double) most_steps;
   }
 
+  //printf("Accelerations set\n");
+
   // Determine the number of steps to take per slice
   // Ex: Stepper_1 moves 1200 steps
   // Stepper_2 moves 600 steps
@@ -480,17 +490,24 @@ bool picostepper_move_to_positions(volatile PicoStepper devices[], int positions
     //printf("Stepper %d steps: %d\n", stepper, stepper_steps[stepper]);
   }
 
+  //printf("Steps per slice calculated\n");
+
   // Accelerate for the first half of the slices
   for(int i=0; i<acceleration_steps/2; i++){
     for(int stepper = 0; stepper < num_steppers; stepper++){
       //printf("Stepper %d taking %d steps with acceleration %d\n", stepper, stepper_steps[stepper], psc.devices[devices[stepper]].moving_acceleration);
       picostepper_move_async(devices[stepper], stepper_steps[stepper], &picostepper_accelerate);
+      step_differences[stepper] -= stepper_steps[stepper];
     }
     // Wait for all motors to finish moving before proceeding
     for(int stepper = 0; stepper < num_steppers; stepper++){
       while(psc.devices[devices[stepper]].is_running);
     }
   }
+
+  sleep_us(5);
+
+  //printf("Done accelerating\n");
 
   // Set acceleration direction to decelerate
   for(int stepper = 0; stepper < num_steppers; stepper++){
@@ -501,23 +518,33 @@ bool picostepper_move_to_positions(volatile PicoStepper devices[], int positions
   for(int i=0; i<acceleration_steps/2; i++){
     for(int stepper = 0; stepper < num_steppers; stepper++){
       picostepper_move_async(devices[stepper], stepper_steps[stepper], &picostepper_accelerate);
+      step_differences[stepper] -= stepper_steps[stepper];
     }
     for(int stepper = 0; stepper < num_steppers; stepper++){
       while(psc.devices[devices[stepper]].is_running);
     }
   }
 
+  sleep_us(5);
+
+  //printf("Done decelerating\n");
+
   // We consume any remaining steps here 
   // This may cause motors to arrive NUMSTEPS out of sync, with a small enough value this isn't a problem yet
   for(int stepper = 0; stepper < num_steppers; stepper++){
     psc.devices[devices[stepper]].acceleration_direction = 0;
-    if(step_differences[stepper]%NUMSTEPS > 0) picostepper_move_async(devices[stepper], step_differences[stepper]%NUMSTEPS, NULL);
-    if(step_differences[stepper] <= NUMSTEPS) picostepper_move_async(devices[stepper], step_differences[stepper], NULL);
+    if(step_differences[stepper] > 0) picostepper_move_async(devices[stepper], step_differences[stepper], NULL);
+    //if(step_differences[stepper]%NUMSTEPS > 0) picostepper_move_async(devices[stepper], step_differences[stepper]%NUMSTEPS, NULL);
+    //if(step_differences[stepper] <= NUMSTEPS) picostepper_move_async(devices[stepper], step_differences[stepper], NULL);
   }
 
   for(int stepper = 0; stepper < num_steppers; stepper++){
     while(psc.devices[devices[stepper]].is_running);
   }
+
+  sleep_us(5);
+
+  //printf("Done coasting\n");
 
   return true;
 }

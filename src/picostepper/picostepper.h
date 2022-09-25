@@ -14,7 +14,7 @@
 #define NUMSTEPS 50 // The number of steps taken between accelerations
 #define A4988 false
 #define TMC2208 true
-#define DRIVER TMC2208
+#define DRIVER A4988
 #define max(a,b) \
   ({ __typeof__ (a) _a = (a); \
       __typeof__ (b) _b = (b); \
