@@ -12,6 +12,7 @@
 #define MAXSTEPRATE 12500000/CLKDIV // Convert the clockrate into a maximum steps/second value
 #define MINDELAY 0
 #define NUMSTEPS 50 // The number of steps taken between accelerations
+#define MINSTEPS 15 // This number depends on you accelerations and speeds, and will need to be tuned to your setup
 #define A4988 false
 #define TMC2208 true
 #define DRIVER A4988
@@ -32,6 +33,7 @@
 #include "hardware/pio.h"
 #include "hardware/dma.h"
 #include "hardware/irq.h"
+#include <hardware/sync.h>
 
 #include "four_wire.pio.h"
 #include "two_wire.pio.h"
