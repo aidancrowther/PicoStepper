@@ -112,7 +112,7 @@ bool picostepper_move_to_position(PicoStepper device, int position);
 void picostepper_accelerate(PicoStepper device);
 void picostepper_set_acceleration(PicoStepper device, uint acceleration);
 void picostepper_set_position(PicoStepper device, uint position);
-bool picostepper_move_to_positions(volatile PicoStepper devices[], int positions[], uint num_steppers);
+bool picostepper_move_to_positions(volatile PicoStepper devices[], int positions[], uint num_steppers, bool sequential);
 void picostepper_set_max_speed(PicoStepper device, uint speed);
 void picostepper_set_min_speed(PicoStepper device, uint speed);
 
